@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>MV選択アプリ (再生エラー対策版)</title>
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #ffe6fa 0%, #e8dff5 50%, #fce1e4 100%);
+      --accent-color: #ff6b9d;
+      --focus-color: #ff3385;
+      --focus-shadow: #ff94c2;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body, html {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      font-family: 'Hiragino Maru Gothic ProN', sans-serif;
+      background: var(--bg-gradient);
+    }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 16px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 20px;
+      box-shadow: 0 4px 15px rgba(255, 182, 193, 0.3);
+      margin-bottom: 16px;
+    }
+
+    h1 { margin: 0; font-size: 1.6rem; color: var(--accent-color); }
+
+    .header-controls { display: flex; align-items: center; gap: 10px; }
+
+    .choice-selector {
+      display: flex; background: #fff0f5;
+      border: 3px solid var(--accent-color);
+      border-radius: 16px; padding: 3px; gap: 4px;
+    }
+
+    .choice-btn {
+      border: none; background: transparent;
+      color: var(--accent-color); font-size: 1.1rem;
+      font-weight: bold; padding: 8px 12px; border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .choice-btn.active { background: var(--accent-color); color: white; }
+
+    .btn {
+      background: white; border: 3px solid var(--accent-color);
+      color: var(--accent-color); border-radius: 16px;
+      padding: 8px 16px; font-size: 1.1rem; font-weight: bold;
+      cursor: pointer;
+    }
+
+    main {
+      flex: 1; display: grid; gap: 16px;
+      width: 100%; height: calc(100vh - 100px);
+    }
+
+    main[data-count="2"] { grid-template-columns: 1fr 1fr; }
+    main[data-count="3"] { grid-template-columns: 1fr 1fr 1fr; }
+    main[data-count="4"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    main[data-count="5"] { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+    main[data-count="6"] { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+    .card {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 28px; border: 6px solid #ffffff;
+      box-shadow: 0 8px 20px rgba(220, 150, 180, 0.25);
+      display: flex; flex-direction: column; overflow: hidden;
+      cursor: pointer; outline: none; transition: transform 0.2s;
+    }
+
+    .card:focus, .card.scanned {
+      border-color: var(--focus-color);
+      box-shadow: 0 0 0 10px var(--focus-shadow);
+      transform: scale(1.03); z-index: 10;
+    }
+
+    .thumbnail-wrapper { flex: 1; position: relative; background: #eee; }
+    .thumbnail-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+
+    .card-info { padding: 10px; background: white; text-align: center; }
+    .card-title { font-size: 1.3rem; font-weight: bold; }
+
+    /* オーバーレイ */
+    #player-overlay {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #000; z-index: 9999; display: none; flex-direction: column;
+    }
+    #player-overlay.active { display: flex; }
+
+    .player-header { position: absolute; top: 24px; right: 24px; z-index: 10000; }
+    .back-btn {
+      background: #ff3385; color: white; border: 4px solid #ffffff;
+      padding: 16px 36px; font-size: 1.8rem; font-weight: bold;
+      border-radius: 50px; cursor: pointer;
+    }
+
+    #error-notice {
+      display: none; position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); text-align: center; color: white;
+      z-index: 99999;
+    }
+    .yt-app-btn {
+      background: #ff0000; color: white; border: none; padding: 20px 40px;
+      font-size: 2rem; border-radius: 20px; cursor: pointer; font-weight: bold;
+      margin-top: 20px; display: inline-block; text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <header>
+      <h1>🌸 MV選択アプリ</h1>
+      <div class="header-controls">
+        <div class="choice-selector">
+          <button class="choice-btn" onclick="setChoiceCount(2)">2択</button>
+          <button class="choice-btn" onclick="setChoiceCount(3)">3択</button>
+          <button class="choice-btn active" onclick="setChoiceCount(4)">4択</button>
+          <button class="choice-btn" onclick="setChoiceCount(5)">5択</button>
+          <button class="choice-btn" onclick="setChoiceCount(6)">6択</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="card-grid" data-count="4"></main>
+  </div>
+
+  <div id="player-overlay">
+    <div class="player-header">
+      <button class="back-btn" tabindex="0" onclick="closePlayer()">◀ もどる</button>
+    </div>
+    <div id="youtube-player"></div>
+    <div id="error-notice">
+      <h2>⚠️ この動画は埋め込み再生が禁止されています</h2>
+      <p style="font-size:1.3rem;">下のボタンを押すとYouTubeで直接再生できます</p>
+      <a id="yt-link" class="yt-app-btn" target="_blank">YouTubeでみる ↗</a>
+    </div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    const defaultVideos = [
+      { title: "ライラック", url: "https://www.youtube.com/watch?v=QW8I4x6a6kI" },
+      { title: "全方向美少女", url: "https://www.youtube.com/watch?v=0v9Jq2WkSNo" },
+      { title: "晩餐歌", url: "https://www.youtube.com/watch?v=ixK2cE0S52I" },
+      { title: "アイドル", url: "https://www.youtube.com/watch?v=ZRtdQ81jPUQ" }
+    ];
+
+    let currentCount = 4;
+    let player = null;
+
+    function extractVideoId(urlOrId) {
+      if (!urlOrId) return '';
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = urlOrId.trim().match(regExp);
+      return (match && match[2].length === 11) ? match[2] : urlOrId.trim();
+    }
+
+    function renderCards() {
+      const grid = document.getElementById('card-grid');
+      grid.setAttribute('data-count', currentCount);
+      grid.innerHTML = '';
+
+      for (let i = 0; i < currentCount; i++) {
+        const item = defaultVideos[i];
+        const videoId = extractVideoId(item.url);
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.tabIndex = 0;
+        card.onclick = () => playVideo(videoId);
+        card.innerHTML = `
+          <div class="thumbnail-wrapper">
+            <img src="https://img.youtube.com/vi/${videoId}/hqdefault.jpg">
+          </div>
+          <div class="card-info"><div class="card-title">${item.title}</div></div>
+        `;
+        grid.appendChild(card);
+      }
+    }
+
+    function setChoiceCount(count) {
+      currentCount = count;
+      document.querySelectorAll('.choice-btn').forEach((b, i) => b.classList.toggle('active', i + 2 === count));
+      renderCards();
+    }
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('youtube-player', {
+        playerVars: { 'autoplay': 1, 'controls': 1 },
+        events: {
+          'onStateChange': (e) => { if (e.data === YT.PlayerState.ENDED) closePlayer(); },
+          'onError': (e) => {
+            // エラー（101 / 150: 埋め込み禁止）の場合に代替ボタンを表示
+            if (e.data === 101 || e.data === 150 || e.data === 2) {
+              document.getElementById('error-notice').style.display = 'block';
+            }
+          }
+        }
+      });
+    }
+
+    function playVideo(videoId) {
+      document.getElementById('error-notice').style.display = 'none';
+      document.getElementById('yt-link').href = `https://www.youtube.com/watch?v=${videoId}`;
+      document.getElementById('player-overlay').classList.add('active');
+
+      if (player && typeof player.loadVideoById === 'function') {
+        player.loadVideoById(videoId);
+      }
+    }
+
+    function closePlayer() {
+      document.getElementById('player-overlay').classList.remove('active');
+      if (player && typeof player.stopVideo === 'function') player.stopVideo();
+    }
+
+    document.addEventListener("DOMContentLoaded", renderCards);
+  </script>
+</body>
+</html>
